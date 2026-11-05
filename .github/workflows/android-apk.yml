@@ -1,0 +1,31 @@
+name: Сборка Android (APK)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Хеш коммита в сборку
+        run: |
+          set -euo pipefail
+          jq --arg sha "${GITHUB_SHA::7}" \
+            '.build.preview.env.EXPO_PUBLIC_COMMIT = $sha' \
+            eas.json > eas.json.tmp && mv eas.json.tmp eas.json
+          cat eas.json
+
+      - name: Сборка APK в облаке Expo
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx eas-cli@latest build --platform android --profile preview --non-interactive --wait
