@@ -33,7 +33,9 @@ jobs:
         run: |
           set -euo pipefail
           WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | jq -r '.workspace.schemes[0]')
+          # Схема приложения — единственная shared-схема в проекте
+          # (схемы вида "boost" — это зависимости CocoaPods)
+          SCHEME=$(basename "$(ls ios/*.xcodeproj/xcshareddata/xcschemes/*.xcscheme | head -1)" .xcscheme)
           echo "Workspace: $WORKSPACE"
           echo "Схема: $SCHEME"
           xcodebuild \
@@ -42,6 +44,7 @@ jobs:
             -configuration Release \
             -archivePath "$PWD/build/Komandometr.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
+            SKIP_INSTALL=NO \
             archive
 
       - name: Упаковать .ipa
