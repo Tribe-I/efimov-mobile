@@ -1,0 +1,60 @@
+name: Сборка iOS (.ipa)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Короткий хеш коммита
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Генерация нативного проекта iOS (prebuild)
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Установить CocoaPods
+        run: pod install --project-directory=ios
+
+      - name: Сборка неподписанного архива
+        env:
+          EXPO_PUBLIC_COMMIT: ${{ steps.vars.outputs.short_sha }}
+        run: |
+          set -euo pipefail
+          WORKSPACE=$(ls -d ios/*.xcworkspace | head -1)
+          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" -json | jq -r '.workspace.schemes[0]')
+          echo "Workspace: $WORKSPACE"
+          echo "Схема: $SCHEME"
+          xcodebuild \
+            -workspace "$WORKSPACE" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -archivePath "$PWD/build/Komandometr.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
+
+      - name: Упаковать .ipa
+        run: |
+          set -euo pipefail
+          mkdir -p build/Payload
+          cp -R build/Komandometr.xcarchive/Products/Applications/*.app build/Payload/
+          cd build
+          zip -r Komandometr.ipa Payload
+
+      - name: Публикация артефакта .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: komandometr-ipa
+          path: build/Komandometr.ipa
+          if-no-files-found: error
